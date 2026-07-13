@@ -1,5 +1,6 @@
 # Codex Model UI Patcher
 纯vibecoding
+
 一个用于修补 ChatGPT/Codex 桌面端模型下拉框显示逻辑的小工具。
 
 它的作用是取消 Codex 前端里对“隐藏模型”的白名单过滤，让 `ccswitch`、自定义模型映射或本地转换层暴露出来的模型，能够正常显示在模型选择列表里。
