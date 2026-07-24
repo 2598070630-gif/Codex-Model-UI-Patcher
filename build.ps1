@@ -1,7 +1,15 @@
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+$WindowsDir = $env:WINDIR
+if ([string]::IsNullOrWhiteSpace($WindowsDir)) {
+  $WindowsDir = $env:SystemRoot
+}
+if ([string]::IsNullOrWhiteSpace($WindowsDir)) {
+  throw 'Windows directory environment variable not found.'
+}
+
+$Csc = Join-Path $WindowsDir 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $OutDir = Join-Path $Root 'dist'
 $Source = Join-Path $Root 'CodexModelUIPatcher.cs'
 $Manifest = Join-Path $Root 'CodexModelUIPatcher.exe.manifest'

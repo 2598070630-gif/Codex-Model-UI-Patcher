@@ -1,5 +1,4 @@
 # Codex Model UI Patcher
-纯vibecoding
 
 一个用于修补 ChatGPT/Codex 桌面端模型下拉框显示逻辑的小工具。
 
@@ -81,22 +80,27 @@ u=false
 
 ## 日志和备份
 
-补丁器会把日志和备份放在：
+补丁器会把日志、备份和候选补丁文件放在 `CodexModelUIPatcher.exe` 所在目录：
 
 ```text
-%LOCALAPPDATA%\CodexModelUIPatcher
+.\patcher.log
+.\Backups
+.\Candidates
 ```
 
-常见路径示例：
+如果 exe 位于项目的 `dist` 目录，常见路径示例：
 
 ```text
-C:\Users\<用户名>\AppData\Local\CodexModelUIPatcher
+C:\Users\Administrator\Documents\Codex\2026-07-13\CodexModelUIPatcher\dist
 ```
 
 其中：
 
 - `patcher.log` 是运行日志
 - `Backups` 目录里是修改前的 `app.asar` 备份
+- `Candidates` 目录里是等待替换的补丁候选文件
+
+如果需要清理旧版本遗留在 `%LOCALAPPDATA%` 或 `C:\ProgramData` 下的状态目录，可以右键以管理员身份运行 `cleanup-old-state-admin.cmd`。
 
 ## 编译
 

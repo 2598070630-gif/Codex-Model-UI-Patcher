@@ -12,7 +12,7 @@ internal static class CodexModelUIPatcher
 {
     private static readonly byte[] OldBytes = new byte[]
     {
-        117, 61, 115, 38, 38, 101, 33, 61, 61, 96, 97, 109,
+        117, 61, 115, 38, 38, 116, 33, 61, 61, 96, 97, 109,
         97, 122, 111, 110, 66, 101, 100, 114, 111, 99, 107, 96
     };
 
@@ -22,16 +22,22 @@ internal static class CodexModelUIPatcher
     private const int MoveFileDelayUntilReboot = 0x4;
     private const int MoveFileWriteThrough = 0x8;
 
-    private static readonly string LocalStateRoot =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CodexModelUIPatcher");
+    private static readonly string StateRoot = GetExecutableDirectory();
 
-    private static readonly string ProgramDataRoot =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "CodexModelUIPatcher");
+    private static readonly string LocalStateRoot = StateRoot;
 
-    private static readonly string LogPath = Path.Combine(LocalStateRoot, "patcher.log");
+    private static readonly string ProgramDataRoot = StateRoot;
+
+    private static readonly string LogPath = Path.Combine(StateRoot, "patcher.log");
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
+
+    private static string GetExecutableDirectory()
+    {
+        string exePath = Process.GetCurrentProcess().MainModule.FileName;
+        return Path.GetDirectoryName(exePath);
+    }
 
     private sealed class Target
     {
@@ -83,7 +89,7 @@ internal static class CodexModelUIPatcher
             if (targets.Count == 0)
             {
                 Console.WriteLine("没有找到 OpenAI.Codex 的 app.asar。");
-                Console.WriteLine("确认 Microsoft Store 版 ChatGPT/Codex 已安装后，再运行这个程序。");
+                Console.WriteLine("确认 Microsoft Store 版 Codex (26.721.3996+) 已安装后，再运行这个程序。");
                 return Finish(2, noPause);
             }
 
@@ -111,13 +117,13 @@ internal static class CodexModelUIPatcher
             if (scheduled > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine("系统已安排在下次 Windows 重启前替换 app.asar。");
-                Console.WriteLine("重启后补丁会自动生效；不用再运行一次。");
+                Console.WriteLine("切换已安排在下次重启时生效。");
+                Console.WriteLine("重启后模型菜单中所有模型都会显示；不用再运行一次。");
             }
             else if (patchedNow > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine("补丁已立即生效。请完全退出 ChatGPT/Codex 后重新打开。");
+                Console.WriteLine("补丁已生效。请完全退出 Codex 后重新打开，模型菜单将显示所有模型。");
             }
             else if (already > 0 && failed == 0)
             {
@@ -144,7 +150,7 @@ internal static class CodexModelUIPatcher
     {
         Console.WriteLine("Codex Model UI Patcher");
         Console.WriteLine("----------------------");
-        Console.WriteLine("用途: 取消 Codex 前端模型下拉框的隐藏模型白名单过滤。");
+        Console.WriteLine("用途: 移除 Codex 模型下拉菜单的隐藏模型过滤 (u=s&&t!==`amazonBedrock`)，显示所有可用模型。");
         Console.WriteLine();
     }
 
@@ -172,7 +178,7 @@ internal static class CodexModelUIPatcher
                     return PatchResult.AlreadyPatched;
                 }
 
-                Console.WriteLine("结果: 没找到可识别的过滤代码。这个版本可能改了前端实现，需要更新补丁器。");
+                Console.WriteLine("结果: 未找到可识别的过滤代码 (u=s&&t!==`amazonBedrock`)。此 Codex 版本可能使用了不同的实现，需要更新补丁器。");
                 Console.WriteLine();
                 Log("pattern not found");
                 return PatchResult.Failed;
@@ -248,7 +254,7 @@ internal static class CodexModelUIPatcher
                 return PatchResult.Failed;
             }
 
-            Console.WriteLine("结果: 已安排到下次 Windows 重启前替换。");
+            Console.WriteLine("结果: 已安排到下次重启前替换。");
             Console.WriteLine();
             Log("scheduled for reboot");
             return PatchResult.ScheduledForReboot;
