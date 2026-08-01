@@ -1,0 +1,7 @@
+dist/Backups/
+dist/Candidates/
+dist/restore-original/
+dist/*.log
+dist/*.txt
+dist/*.ps1
+*.zip

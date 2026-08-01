@@ -54,31 +54,43 @@ CodexModelUIPatcher.exe
 
 ## 补丁原理
 
-当前已验证版本中，前端打包代码里存在如下逻辑：
+当前已验证版本 (Codex 26.727.4816.0) 中，前端打包代码里隐藏模型过滤分散在 4 个位置。核心逻辑都是根据 `useHiddenModels` 和 `!hidden` 过滤模型列表，关键的三元表达式是：
 
 ```js
-u=s&&e!==`amazonBedrock`
+useHiddenModels && authMethod !== `amazonBedrock` ? availableModels.has(model) : !model.hidden
 ```
 
-后续列表过滤会根据 `u` 决定是否只展示白名单模型。
+当 `useHiddenModels` 为 `true` 且不是 Bedrock 时（即 chatgpt 场景），会走前半段 `availableModels.has(model)` 白名单过滤。只改后半段 `!hidden` 是不够的——必须把**整个三元表达式**替换成 `!0`。
 
-补丁器会把这段等长替换为：
+补丁器会对 4 个位置做等长二进制替换：
 
-```js
-u=false                 
+```text
+1. J$r 函数:    (i&&t!==`amazonBedrock`?n.has(r.model):!r.hidden)   -> (!0<空格>   )
+2. 非本地分支:  n.filter(e=>!e.hidden);                               -> n.filter(e=>!0<空格>);
+3. catch 分支:  n.filter(e=>!e.hidden)}                               -> n.filter(e=>!0<空格>)}
+4. 本地主过滤:  i.useHiddenModels&&r!==`amazonBedrock`?...:!e.hidden)} -> !0<空格>            )}
 ```
 
-替换长度保持一致，因此不会改变 `app.asar` 的整体大小和文件布局。
+注意：替换时必须保留原位置的闭合括号（`(`、`)`、`}`），否则会导致 JavaScript 语法错误，Codex 卡在加载界面。
+
+每处替换长度保持一致（`!0` 后用空格补齐），因此不会改变 `app.asar` 的整体大小和文件布局。
+
+补丁器会检查每个位置：
+
+- 支持"原始未补丁"和"旧版部分补丁"两种状态自动识别和转换
+- 如果某位置的旧模式出现多次，避免误改，停止
+- 如果全部位置都已是补丁版，提示无需操作
+- 如果完全找不到可识别模式，提示需要更新补丁器
 
 如果新版本前端代码结构发生变化，补丁器会停止并提示：
 
 ```text
-没找到可识别的过滤代码
+未找到可识别的隐藏模型过滤代码
 ```
 
 这时需要更新补丁器，而不是强行修改文件。
 
-## 日志和备份
+# 日志和备份
 
 补丁器会把日志、备份和候选补丁文件放在 `CodexModelUIPatcher.exe` 所在目录：
 
@@ -140,6 +152,19 @@ codex debug models
 这是正常情况。`C:\Program Files\WindowsApps` 下的 Microsoft Store 应用文件经常无法在当前会话里直接替换。
 
 补丁器会调用 Windows 的重启前替换机制。重启一次后，系统会在应用启动前完成替换。
+
+### 补丁后 Codex 卡在加载界面
+
+这通常是补丁破坏了 `app.asar` 中 JavaScript 的语法结构，导致 Electron 无法加载前端代码。最常见的原因是补丁替换时吞掉了闭合括号（`(`、`)`、`}`）。
+
+排查步骤：
+
+1. 检查 `patcher.log` 中 `applied site` 的行，确认补丁器找到了几个位置
+2. 用原生备份恢复 `app.asar`（在 `Backups` 目录中）
+3. 检查补丁器源码中 `Newv` 字节数组末尾是否包含正确的闭合字符
+4. 修复后重新编译并运行
+
+如果不想手动排查，可以直接从 Microsoft Store 重新安装 Codex 恢复原生 `app.asar`。
 
 ### 提示找不到可识别的过滤代码
 

@@ -10,79 +10,17 @@ using System.Text;
 
 internal static class CodexModelUIPatcher
 {
+    private static readonly byte[] OldBytes = new byte[]
+    {
+        117, 61, 115, 38, 38, 116, 33, 61, 61, 96, 97, 109,
+        97, 122, 111, 110, 66, 101, 100, 114, 111, 99, 107, 96
+    };
+
+    private static readonly byte[] NewBytes = Encoding.UTF8.GetBytes("u=false                 ");
+
     private const int MoveFileReplaceExisting = 0x1;
     private const int MoveFileDelayUntilReboot = 0x4;
     private const int MoveFileWriteThrough = 0x8;
-
-    // Updated for Codex 26.727.4816.0:
-    // The old single pattern (u=s&&t!==`amazonBedrock`) no longer exists.
-    // The hidden-model filter is now spread across 4 sites. Each OLD pattern
-    // appears once; we always replace with a length-preserving !0 + spaces so
-    // the asar size never changes. The ternary conditions (useHiddenModels /
-    // availableModels / hidden) are fully neutralized, not just the else branch.
-    //
-    // The first-run patcher only knew the initial patterns and patched only the
-    // `!hidden` else branches -> the live file on this machine is already in the
-    // partial state, so each site accepts MULTIPLE old patterns (initial and
-    // partial) and a single final new pattern, so we can fix-up in one run.
-    private struct Patch
-    {
-        public byte[][] Olds;
-        public byte[] Newv;
-    }
-
-    private static byte[] B(params byte[] xs) { return xs; }
-
-    private static Patch[] Patches = new Patch[]
-    {
-        // Site 1: J$r({...,useHiddenModels:i}) visibility ternary wrapped in parens.
-        // Full original: (i&&t!==`amazonBedrock`?n.has(r.model):!r.hidden)
-        // Partial (first bad patch only fixed the else branch): (...:!0<spaces>)
-        // Final: (!0<spaces>) -> entire expression always true.
-        // The outside `(` and `)` are kept, so the OP true-branch is also neutralized.
-        new Patch
-        {
-            Olds = new byte[][]
-            {
-                B(40, 105, 38, 38, 116, 33, 61, 61, 96, 97, 109, 97, 122, 111, 110, 66, 101, 100, 114, 111, 99, 107, 96, 63, 110, 46, 104, 97, 115, 40, 114, 46, 109, 111, 100, 101, 108, 41, 58, 33, 114, 46, 104, 105, 100, 100, 101, 110, 41),
-                B(40, 105, 38, 38, 116, 33, 61, 61, 96, 97, 109, 97, 122, 111, 110, 66, 101, 100, 114, 111, 99, 107, 96, 63, 110, 46, 104, 97, 115, 40, 114, 46, 109, 111, 100, 101, 108, 41, 58, 33, 48, 32, 32, 32, 32, 32, 32, 32, 41)
-            },
-            Newv = B(40, 33, 48, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 41),
-        },
-        // Site 2: $Bu non-local host branch.
-        // Initial: n.filter(e=>!e.hidden);  Final: n.filter(e=>!0<spaces>); -> keeps all models.
-        new Patch
-        {
-            Olds = new byte[][]
-            {
-                B(110, 46, 102, 105, 108, 116, 101, 114, 40, 101, 61, 62, 33, 101, 46, 104, 105, 100, 100, 101, 110, 41, 59)
-            },
-            Newv = B(110, 46, 102, 105, 108, 116, 101, 114, 40, 101, 61, 62, 33, 48, 32, 32, 32, 32, 32, 32, 32, 41, 59)
-        },
-        // Site 3: $Bu catch branch.
-        // Initial: n.filter(e=>!e.hidden)}  Final: n.filter(e=>!0<spaces>)} -> keeps all models.
-        new Patch
-        {
-            Olds = new byte[][]
-            {
-                B(110, 46, 102, 105, 108, 116, 101, 114, 40, 101, 61, 62, 33, 101, 46, 104, 105, 100, 100, 101, 110, 41, 125)
-            },
-            Newv = B(110, 46, 102, 105, 108, 116, 101, 114, 40, 101, 61, 62, 33, 48, 32, 32, 32, 32, 32, 32, 32, 41, 125)
-        },
-        // Site 4: $Bu local-host main filter (before the closing }).
-        // Initial ternary+): i.useHiddenModels&&r!==`amazonBedrock`?i.availableModels.has(e.model):!e.hidden)}
-        // Partial (bad patch only fixed else):  same but else branch = !0<spaces>) }
-        // Final: !0<spaces> -> filter callback always true, all models kept.
-        new Patch
-        {
-            Olds = new byte[][]
-            {
-                B(105, 46, 117, 115, 101, 72, 105, 100, 100, 101, 110, 77, 111, 100, 101, 108, 115, 38, 38, 114, 33, 61, 61, 96, 97, 109, 97, 122, 111, 110, 66, 101, 100, 114, 111, 99, 107, 96, 63, 105, 46, 97, 118, 97, 105, 108, 97, 98, 108, 101, 77, 111, 100, 101, 108, 115, 46, 104, 97, 115, 40, 101, 46, 109, 111, 100, 101, 108, 41, 58, 33, 101, 46, 104, 105, 100, 100, 101, 110, 41, 125),
-                B(105, 46, 117, 115, 101, 72, 105, 100, 100, 101, 110, 77, 111, 100, 101, 108, 115, 38, 38, 114, 33, 61, 61, 96, 97, 109, 97, 122, 111, 110, 66, 101, 100, 114, 111, 99, 107, 96, 63, 105, 46, 97, 118, 97, 105, 108, 97, 98, 108, 101, 77, 111, 100, 101, 108, 115, 46, 104, 97, 115, 40, 101, 46, 109, 111, 100, 101, 108, 41, 58, 33, 48, 32, 32, 32, 32, 32, 32, 32, 41, 125)
-            },
-            Newv = B(33, 48, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 41, 125)
-        },
-    };
 
     private static readonly string StateRoot = GetExecutableDirectory();
 
@@ -142,7 +80,10 @@ internal static class CodexModelUIPatcher
             PrintHeader();
             Log("started");
 
-            ValidatePatchLengths();
+            if (OldBytes.Length != NewBytes.Length)
+            {
+                throw new InvalidOperationException("Patch length mismatch.");
+            }
 
             List<Target> targets = FindTargets();
             if (targets.Count == 0)
@@ -209,7 +150,7 @@ internal static class CodexModelUIPatcher
     {
         Console.WriteLine("Codex Model UI Patcher");
         Console.WriteLine("----------------------");
-        Console.WriteLine("用途: 移除 Codex 模型下拉菜单的隐藏模型过滤 (useHiddenModels / !hidden)，显示所有可用模型。");
+        Console.WriteLine("用途: 移除 Codex 模型下拉菜单的隐藏模型过滤 (u=s&&t!==`amazonBedrock`)，显示所有可用模型。");
         Console.WriteLine();
     }
 
@@ -222,73 +163,34 @@ internal static class CodexModelUIPatcher
         try
         {
             byte[] original = File.ReadAllBytes(target.AsarPath);
+            int oldIndex = IndexOf(original, OldBytes, 0);
+            int newIndex = IndexOf(original, NewBytes, 0);
 
-            // Per site: which old pattern matched (or -1), how many times it appears.
-            int[][] oldIndexPer = new int[Patches.Length][];
-            int[] oldCountPer = new int[Patches.Length];
-            int[] newCountPer = new int[Patches.Length];
+            Console.WriteLine("状态: oldIndex=" + oldIndex + " newIndex=" + newIndex + " size=" + original.Length);
+            Log("state oldIndex=" + oldIndex + " newIndex=" + newIndex + " size=" + original.Length);
 
-            // For each site, count occurrences of every old alternative and of the final new.
-            for (int p = 0; p < Patches.Length; p++)
+            if (oldIndex < 0)
             {
-                oldIndexPer[p] = new int[Patches[p].Olds.Length];
-                int totalOld = 0;
-                for (int o = 0; o < Patches[p].Olds.Length; o++)
-                {
-                    int idx = IndexOf(original, Patches[p].Olds[o], 0);
-                    int cnt = CountAll(original, Patches[p].Olds[o]);
-                    oldIndexPer[p][o] = idx;
-                    totalOld += cnt;
-                }
-                oldCountPer[p] = totalOld;
-                newCountPer[p] = CountAll(original, Patches[p].Newv);
-            }
-
-            int sitesDone = 0;
-            int sitesPending = 0;
-            for (int p = 0; p < Patches.Length; p++)
-            {
-                if (newCountPer[p] > 0 && oldCountPer[p] == 0) sitesDone++;
-                else if (oldCountPer[p] > 0) sitesPending++;
-            }
-
-            Console.WriteLine("状态: pending=" + sitesPending + "/" + Patches.Length + " done=" + sitesDone + "/" + Patches.Length + " size=" + original.Length);
-            Log("state pending=" + sitesPending + "/" + Patches.Length + " done=" + sitesDone + " size=" + original.Length);
-
-            if (sitesPending == 0)
-            {
-                if (sitesDone == Patches.Length)
+                if (newIndex >= 0)
                 {
                     Console.WriteLine("结果: 已经是补丁版。");
                     Console.WriteLine();
                     return PatchResult.AlreadyPatched;
                 }
-                Console.WriteLine("结果: 未找到可识别的隐藏模型过滤代码 (useHiddenModels / !hidden)。此 Codex 版本可能使用了不同的实现，需要更新补丁器。");
+
+                Console.WriteLine("结果: 未找到可识别的过滤代码 (u=s&&t!==`amazonBedrock`)。此 Codex 版本可能使用了不同的实现，需要更新补丁器。");
                 Console.WriteLine();
                 Log("pattern not found");
                 return PatchResult.Failed;
             }
 
-            // sitesPending > 0: proceed to patch the pending sites.
-
-            // It is fine for some sites to already be done (e.g. partial first-bad patch
-            // fixed the simple filters). We just patch every still-pending site to its
-            // final form. Proceed to patch.
-            for (int p = 0; p < Patches.Length; p++)
+            int second = IndexOf(original, OldBytes, oldIndex + OldBytes.Length);
+            if (second >= 0)
             {
-                if (newCountPer[p] > 0) continue; // already done, skip
-                int thisOld = 0;
-                for (int o = 0; o < Patches[p].Olds.Length; o++)
-                {
-                    thisOld += CountAll(original, Patches[p].Olds[o]);
-                }
-                if (thisOld != 1)
-                {
-                    Console.WriteLine("结果: 站点 " + p + " 匹配次数异常 (" + thisOld + ")，避免误改，已停止。");
-                    Console.WriteLine();
-                    Log("ambiguous site " + p + " count=" + thisOld);
-                    return PatchResult.Failed;
-                }
+                Console.WriteLine("结果: 找到多个候选位置，避免误改，已停止。");
+                Console.WriteLine();
+                Log("ambiguous offsets " + oldIndex + " " + second);
+                return PatchResult.Failed;
             }
 
             string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
@@ -305,38 +207,18 @@ internal static class CodexModelUIPatcher
             Console.WriteLine("备份: " + backupPath);
             Log("backup " + backupPath);
 
-            for (int p = 0; p < Patches.Length; p++)
-            {
-                if (newCountPer[p] > 0) continue; // already done, no rewrite needed
-                int idx = -1;
-                for (int o = 0; o < Patches[p].Olds.Length; o++)
-                {
-                    if (oldIndexPer[p][o] >= 0) { idx = oldIndexPer[p][o]; break; }
-                }
-                if (idx < 0) continue;
-                Buffer.BlockCopy(Patches[p].Newv, 0, original, idx, Patches[p].Newv.Length);
-                Log("applied site " + p + " at " + idx);
-            }
+            Buffer.BlockCopy(NewBytes, 0, original, oldIndex, NewBytes.Length);
             File.WriteAllBytes(candidatePath, original);
             ApplyTargetAcl(target.AsarPath, candidatePath);
 
             byte[] candidate = File.ReadAllBytes(candidatePath);
-            bool verifyOk = true;
-            for (int p = 0; p < Patches.Length; p++)
-            {
-                bool oldGone = true;
-                for (int o = 0; o < Patches[p].Olds.Length; o++)
-                {
-                    if (IndexOf(candidate, Patches[p].Olds[o], 0) >= 0) oldGone = false;
-                }
-                if (!oldGone) verifyOk = false;
-                if (IndexOf(candidate, Patches[p].Newv, 0) < 0) verifyOk = false;
-            }
-            if (!verifyOk)
+            int verifyOld = IndexOf(candidate, OldBytes, 0);
+            int verifyNew = IndexOf(candidate, NewBytes, 0);
+            if (verifyOld >= 0 || verifyNew < 0)
             {
                 Console.WriteLine("结果: 候选补丁文件验证失败。");
                 Console.WriteLine();
-                Log("candidate verification failed");
+                Log("candidate verification failed old=" + verifyOld + " new=" + verifyNew);
                 return PatchResult.Failed;
             }
 
@@ -383,20 +265,6 @@ internal static class CodexModelUIPatcher
             Console.WriteLine();
             Log("target failed: " + ex);
             return PatchResult.Failed;
-        }
-    }
-
-    private static void ValidatePatchLengths()
-    {
-        for (int p = 0; p < Patches.Length; p++)
-        {
-            for (int o = 0; o < Patches[p].Olds.Length; o++)
-            {
-                if (Patches[p].Olds[o].Length != Patches[p].Newv.Length)
-                {
-                    throw new InvalidOperationException("Patch length mismatch at site " + p + " old " + o + ".");
-                }
-            }
         }
     }
 
@@ -592,21 +460,6 @@ internal static class CodexModelUIPatcher
             if (matched) return i;
         }
         return -1;
-    }
-
-    private static int CountAll(byte[] haystack, byte[] needle)
-    {
-        if (needle == null || needle.Length == 0 || haystack == null || haystack.Length < needle.Length) return 0;
-        int count = 0;
-        int idx = 0;
-        while (true)
-        {
-            int found = IndexOf(haystack, needle, idx);
-            if (found < 0) break;
-            count++;
-            idx = found + needle.Length;
-        }
-        return count;
     }
 
     private static void ApplyTargetAcl(string targetPath, string candidatePath)
